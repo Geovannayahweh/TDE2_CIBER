@@ -1,5 +1,5 @@
 TDE - Jantar dos Filósofos, Semáforos e Deadlock
-Vídeo no YouTube:
+Vídeo no YouTube: https://youtu.be/QKqzeF4SxLo
 
 Grupo 5
 Clara Amazonas Pereira da Costa
