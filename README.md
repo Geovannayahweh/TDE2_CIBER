@@ -86,3 +86,70 @@ Progresso e justiça
 Como sempre tem alguém que consegue comer, o sistema nunca fica parado. Faltava evitar a inanição, que é um filósofo ficar esperando pra sempre enquanto o vizinho pega o mesmo garfo de novo e de novo. Pra isso criamos os semáforos no modo justo (new Semaphore(1, true)), que entrega o garfo pra quem está esperando há mais tempo, numa fila FIFO.
 
 Numa execução de 10 segundos (logs/p1-hierarquia.txt), o filósofo 0 comeu 19 vezes, o 1 comeu 25, o 2 comeu 28, o 3 comeu 29 e o 4 comeu 18. Os números não ficaram iguais, mas todos comeram várias vezes e nenhum ficou sem comer.
+
+
+Parte 3 - Deadlock
+
+O cenário
+Temos dois locks, LOCK_A e LOCK_B, e duas threads. A Thread 1 pega o A, dorme 50 ms e tenta pegar o B. A Thread 2 faz o contrário: pega o B, dorme 50 ms e tenta pegar o A. O sleep serve pra garantir que, quando cada uma for atrás do segundo lock, a outra já esteja segurando ele.
+
+Pseudocódigo da versão que trava:
+
+    Thread 1:                      Thread 2:
+      adquirir(LOCK_A)               adquirir(LOCK_B)
+      dormir(50ms)                   dormir(50ms)
+      adquirir(LOCK_B)               adquirir(LOCK_A)
+      imprimir "T1 concluiu"         imprimir "T2 concluiu"
+      liberar(LOCK_B)                liberar(LOCK_A)
+      liberar(LOCK_A)                liberar(LOCK_B)
+
+Saída do java DeadlockTravando (logs/p3-deadlock.txt). O programa não termina, e "T1 concluiu" e "T2 concluiu" nunca aparecem:
+
+    T2 tentando pegar LOCK_B
+    T2 pegou LOCK_B
+    T1 tentando pegar LOCK_A
+    T1 pegou LOCK_A
+    T2 tentando pegar LOCK_A
+    T1 tentando pegar LOCK_B
+
+Com o programa travado, rodamos o jstack, e ele mesmo detectou o deadlock (a saída completa está em logs/p3-jstack.txt):
+
+    Found one Java-level deadlock:
+    =============================
+    "Thread-0":
+      waiting for ownable synchronizer 0x000000008cd62ce0, (a java.util.concurrent.locks.ReentrantLock$NonfairSync),
+      which is held by "Thread-1"
+
+    "Thread-1":
+      waiting for ownable synchronizer 0x000000008cd62cb0, (a java.util.concurrent.locks.ReentrantLock$NonfairSync),
+      which is held by "Thread-0"
+
+A Thread-0 é a T1 e a Thread-1 é a T2, pela ordem em que foram criadas.
+
+As condições de Coffman aparecem todas aqui também. Cada lock só pode estar com uma thread de cada vez (exclusão mútua). A T1 segura o A enquanto espera o B, e a T2 segura o B enquanto espera o A (manter e esperar). Um lock não pode ser tirado de uma thread, só ela mesma pode liberar (não preempção). E a T1 espera a T2, que espera a T1 (espera circular). Como as quatro acontecem ao mesmo tempo, o programa trava.
+
+A correção: ordem global de aquisição
+No DeadlockCorrigido.java, as duas threads sempre pegam o LOCK_A antes do LOCK_B:
+
+    Thread 1 e Thread 2:
+      adquirir(LOCK_A)
+        adquirir(LOCK_B)
+          // seção crítica
+        liberar(LOCK_B)
+      liberar(LOCK_A)
+
+Isso quebra a espera circular. A thread que consegue o LOCK_A primeiro também consegue o LOCK_B, porque a outra fica esperando lá no LOCK_A e nem chega a tentar o B. Então nunca acontece de uma thread estar com o B esperando o A, e o ciclo não fecha.
+
+Saída (logs/p3-corrigido.txt):
+
+    T1 tentando pegar LOCK_A
+    T2 tentando pegar LOCK_A
+    T1 pegou LOCK_A
+    T1 tentando pegar LOCK_B
+    T1 pegou LOCK_B
+    T1 concluiu
+    T2 pegou LOCK_A
+    T2 tentando pegar LOCK_B
+    T2 pegou LOCK_B
+    T2 concluiu
+    Terminou sem deadlock
