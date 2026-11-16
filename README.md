@@ -1,10 +1,11 @@
 TDE - Jantar dos Filósofos, Semáforos e Deadlock
+
 Vídeo no YouTube: https://youtu.be/QKqzeF4SxLo
 
-Grupo 5
-Clara Amazonas Pereira da Costa
-Geovanna Karolyne Javé Soto
-Guilherme Reis Carvalho
+Grupo 5:
+Clara Amazonas Pereira da Costa,
+Geovanna Karolyne Javé Soto,
+Guilherme Reis Carvalho,
 Vinicius Meier Trevisan
 
 Fizemos as três partes em Java e testamos com o JDK 21. Não usamos nenhuma biblioteca externa, só o que já vem no Java (Thread, Semaphore e ReentrantLock). Os logs das execuções que aparecem aqui estão na pasta logs/.
@@ -25,12 +26,14 @@ Depois é só rodar a classe que quiser:
     java DeadlockCorrigido       (parte 3, termina normalmente)
 
 
-Parte 1 - Jantar dos Filósofos
+**Parte 1 - Jantar dos Filósofos**
 
-O problema
+O problema:
+
 São cinco filósofos numa mesa redonda, e cada um fica alternando entre pensar, sentir fome e comer. Entre cada dois filósofos tem um garfo, então são 5 garfos no total. Pra comer, o filósofo precisa dos dois garfos que estão do lado dele, e cada um desses garfos também é usado pelo vizinho. No código, o garfo i fica entre o filósofo i e o filósofo (i+1) mod 5, e cada garfo é um semáforo com 1 permissão.
 
-Por que trava
+Por que trava:
+
 Na versão ingênua (FilosofosIngenuo.java), todo mundo pega primeiro o garfo da esquerda e depois o da direita. Se os cinco pegarem o da esquerda ao mesmo tempo, cada um fica com um garfo na mão esperando o da direita, que está com o vizinho. Como ninguém solta o que já pegou, ninguém come. Colocamos um sleep entre pegar o primeiro e o segundo garfo pra garantir que isso acontecesse em toda execução.
 
 Log da execução (logs/p1-ingenuo.txt). Depois da última linha o programa fica parado:
@@ -55,7 +58,8 @@ Nenhum filósofo chega a imprimir "comendo".
 
 Olhando as condições de Coffman, todas aparecem nessa versão. Tem exclusão mútua, porque um garfo só fica com um filósofo de cada vez. Tem manter e esperar, já que o filósofo continua segurando o garfo da esquerda enquanto espera o da direita. Não tem preempção, ou seja, ninguém consegue tirar o garfo da mão de outro. E tem espera circular: o 0 espera o 1, o 1 espera o 2, e assim vai até o 4, que espera o 0.
 
-A solução: hierarquia de recursos
+A solução- hierarquia de recursos:
+
 Numeramos os garfos de 0 a 4 e todo filósofo pega primeiro o garfo de número menor e depois o de número maior. Na prática, isso só muda alguma coisa pro filósofo 4, que tem os garfos 4 e 0 e por isso passa a pegar o 0 primeiro.
 
 Com isso a espera circular deixa de existir. Pra fechar um ciclo, alguém teria que estar segurando um garfo de número maior e esperando um de número menor, e a regra não deixa isso acontecer. Então sempre tem pelo menos um filósofo que consegue pegar os dois garfos, comer e devolver. As outras três condições continuam lá, mas sem a espera circular não dá deadlock.
@@ -82,38 +86,45 @@ Pseudocódigo:
             liberar(garfos[maior])
             liberar(garfos[menor])
 
-Progresso e justiça
+Progresso e justiça:
+
 Como sempre tem alguém que consegue comer, o sistema nunca fica parado. Faltava evitar a inanição, que é um filósofo ficar esperando pra sempre enquanto o vizinho pega o mesmo garfo de novo e de novo. Pra isso criamos os semáforos no modo justo (new Semaphore(1, true)), que entrega o garfo pra quem está esperando há mais tempo, numa fila FIFO.
 
 Numa execução de 10 segundos (logs/p1-hierarquia.txt), o filósofo 0 comeu 19 vezes, o 1 comeu 25, o 2 comeu 28, o 3 comeu 29 e o 4 comeu 18. Os números não ficaram iguais, mas todos comeram várias vezes e nenhum ficou sem comer.
 
 
-Parte 2 - Semáforos
+**Parte 2 - Semáforos**
 
 O ContadorConcorrente.java cria 8 threads (T) e cada uma soma 1 num contador compartilhado 200.000 vezes (M). No final o contador deveria valer T x M = 1.600.000. Fizemos uma versão sem nenhuma sincronização e outra com um semáforo binário justo (new Semaphore(1, true)), e rodamos cada uma 3 vezes (logs/p2-contador.txt).
 
 Uma coisa que tivemos que fazer foi declarar o contador como volatile. Sem isso, em algumas execuções o JIT otimizava o laço e a versão sem semáforo acabava dando o valor certo por sorte, e aí não dava pra ver a condição de corrida.
 
-Resultados
+Resultados:
+
 Sem semáforo, as três execuções deram 1.134.581 (45 ms), 1.251.137 (15 ms) e 807.696 (23 ms). Nenhuma chegou perto de 1.600.000, e cada uma deu um valor diferente.
 Com semáforo, as três deram exatamente 1.600.000, mas levaram 20.722 ms, 17.706 ms e 20.063 ms.
 
-Por que a versão sem sincronização perde incrementos
+Por que a versão sem sincronização perde incrementos:
+
 O count = count + 1 parece uma coisa só, mas na verdade são três passos: ler o valor, somar 1 e escrever de volta. Se duas threads leem o mesmo valor antes de qualquer uma escrever, as duas escrevem o mesmo número e um dos incrementos some. É uma condição de corrida, e é por isso que o resultado muda toda vez.
 
-Por que a versão com semáforo dá certo
+Por que a versão com semáforo dá certo:
+
 O semáforo binário só deixa uma thread por vez entrar no trecho do count = count + 1. As outras ficam paradas no acquire() até a que está lá dentro chamar release(). Assim ninguém se mete no meio da leitura, da soma e da escrita. Colocamos o release() dentro de um finally pra permissão ser devolvida mesmo se der alguma exceção.
 
-O custo no desempenho
+O custo no desempenho:
+
 A diferença de tempo foi enorme: entre 17 e 20 segundos com semáforo, contra algumas dezenas de milissegundos sem. A versão sem semáforo é rápida porque nenhuma thread espera ninguém, só que o resultado sai errado. Com o semáforo justo, a cada incremento a thread entra na fila, pode ser bloqueada e depois precisa ser acordada pelo sistema operacional, e isso demora muito mais do que a soma em si. O modo justo garante que as threads sejam atendidas na ordem em que chegaram, mas em troca o throughput cai bastante.
 
-Visibilidade e ordenação (happens-before)
+Visibilidade e ordenação (happens-before):
+
 No modelo de memória do Java, o release() de uma thread acontece antes (happens-before) do próximo acquire() de outra thread no mesmo semáforo. Isso quer dizer que tudo o que a primeira thread escreveu em count antes do release() vai estar visível pra segunda depois do acquire(), e que as instruções não podem ser reordenadas passando por esse ponto. O volatile sozinho só resolve a visibilidade. Ele não torna o incremento atômico, e por isso a versão sem semáforo continuou errada mesmo com o contador volatile. O semáforo resolve as duas coisas.
 
 
-Parte 3 - Deadlock
+**Parte 3 - Deadlock**
 
-O cenário
+O cenário:
+
 Temos dois locks, LOCK_A e LOCK_B, e duas threads. A Thread 1 pega o A, dorme 50 ms e tenta pegar o B. A Thread 2 faz o contrário: pega o B, dorme 50 ms e tenta pegar o A. O sleep serve pra garantir que, quando cada uma for atrás do segundo lock, a outra já esteja segurando ele.
 
 Pseudocódigo da versão que trava:
