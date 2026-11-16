@@ -88,6 +88,29 @@ Como sempre tem alguém que consegue comer, o sistema nunca fica parado. Faltava
 Numa execução de 10 segundos (logs/p1-hierarquia.txt), o filósofo 0 comeu 19 vezes, o 1 comeu 25, o 2 comeu 28, o 3 comeu 29 e o 4 comeu 18. Os números não ficaram iguais, mas todos comeram várias vezes e nenhum ficou sem comer.
 
 
+Parte 2 - Semáforos
+
+O ContadorConcorrente.java cria 8 threads (T) e cada uma soma 1 num contador compartilhado 200.000 vezes (M). No final o contador deveria valer T x M = 1.600.000. Fizemos uma versão sem nenhuma sincronização e outra com um semáforo binário justo (new Semaphore(1, true)), e rodamos cada uma 3 vezes (logs/p2-contador.txt).
+
+Uma coisa que tivemos que fazer foi declarar o contador como volatile. Sem isso, em algumas execuções o JIT otimizava o laço e a versão sem semáforo acabava dando o valor certo por sorte, e aí não dava pra ver a condição de corrida.
+
+Resultados
+Sem semáforo, as três execuções deram 1.134.581 (45 ms), 1.251.137 (15 ms) e 807.696 (23 ms). Nenhuma chegou perto de 1.600.000, e cada uma deu um valor diferente.
+Com semáforo, as três deram exatamente 1.600.000, mas levaram 20.722 ms, 17.706 ms e 20.063 ms.
+
+Por que a versão sem sincronização perde incrementos
+O count = count + 1 parece uma coisa só, mas na verdade são três passos: ler o valor, somar 1 e escrever de volta. Se duas threads leem o mesmo valor antes de qualquer uma escrever, as duas escrevem o mesmo número e um dos incrementos some. É uma condição de corrida, e é por isso que o resultado muda toda vez.
+
+Por que a versão com semáforo dá certo
+O semáforo binário só deixa uma thread por vez entrar no trecho do count = count + 1. As outras ficam paradas no acquire() até a que está lá dentro chamar release(). Assim ninguém se mete no meio da leitura, da soma e da escrita. Colocamos o release() dentro de um finally pra permissão ser devolvida mesmo se der alguma exceção.
+
+O custo no desempenho
+A diferença de tempo foi enorme: entre 17 e 20 segundos com semáforo, contra algumas dezenas de milissegundos sem. A versão sem semáforo é rápida porque nenhuma thread espera ninguém, só que o resultado sai errado. Com o semáforo justo, a cada incremento a thread entra na fila, pode ser bloqueada e depois precisa ser acordada pelo sistema operacional, e isso demora muito mais do que a soma em si. O modo justo garante que as threads sejam atendidas na ordem em que chegaram, mas em troca o throughput cai bastante.
+
+Visibilidade e ordenação (happens-before)
+No modelo de memória do Java, o release() de uma thread acontece antes (happens-before) do próximo acquire() de outra thread no mesmo semáforo. Isso quer dizer que tudo o que a primeira thread escreveu em count antes do release() vai estar visível pra segunda depois do acquire(), e que as instruções não podem ser reordenadas passando por esse ponto. O volatile sozinho só resolve a visibilidade. Ele não torna o incremento atômico, e por isso a versão sem semáforo continuou errada mesmo com o contador volatile. O semáforo resolve as duas coisas.
+
+
 Parte 3 - Deadlock
 
 O cenário
